@@ -16,7 +16,7 @@ public class Main {
 
   public static void main(String[] args) {
 
-    Spark.port(Integer.valueOf(System.getenv("PORT")));
+    Spark.port(Integer.valueOf(System.getenv("STANFORD_PORT")));
     Spark.staticFileLocation("/public");
 
     Spark.get("/hello", (req, res) -> "Hello World");
