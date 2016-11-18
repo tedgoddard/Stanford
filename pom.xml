@@ -8,7 +8,7 @@
       <name>repo1.maven.org</name>
       <url>https://repo1.maven.org</url>
     </repository>
-  <repositories>
+  </repositories>
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.robotsandpencils</groupId>
   <version>1.0-SNAPSHOT</version>
