@@ -19,14 +19,12 @@ public class Main {
     Spark.port(Integer.valueOf(System.getenv("STANFORD_PORT")));
     Spark.staticFileLocation("/public");
 
-    Spark.get("/hello", (req, res) -> "Hello World");
+    String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
+    LexicalizedParser parser = LexicalizedParser.loadModel(parserModel);
 
     Spark.get("/tree/:text", (request, response) -> {
         String sentence = request.params(":text");
-        System.out.println("will parse" + sentence);
-
-        String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
-        LexicalizedParser parser = LexicalizedParser.loadModel(parserModel);
+        System.out.println("will parse: " + sentence);
 
         Tree tree = parser.parse(sentence);
         String treeString = tree.toString();
