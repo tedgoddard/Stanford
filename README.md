@@ -1,5 +1,7 @@
 # StanfordService
 
+A simple web service providing CoreNLP parsing.
+
 ## Build
 
 ```
@@ -11,4 +13,10 @@ javac -cp ".:lib/*" Stanford.java
 
 ```
 java -cp ".:lib/*" Stanford
+```
+
+## USE
+
+```
+curl "http://localhost:8888/tree/Does%2FVBZ%20my%20dog%20like%20to%20eat%20sausages%3F"
 ```
