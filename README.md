@@ -20,3 +20,7 @@ java -cp ".:lib/*" Stanford
 ```
 curl "http://localhost:8888/tree/Does%2FVBZ%20my%20dog%20like%20to%20eat%20sausages%3F"
 ```
+or
+```
+curl  -H "Content-Type: application/json" -X POST -d  '{"text":"Does my dog eat sausage?"}'  "http://localhost:8888/tree/"
+```
