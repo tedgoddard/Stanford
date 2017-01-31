@@ -1,5 +1,6 @@
 import java.util.Arrays;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Stream;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -52,18 +53,18 @@ public class Stanford {
             System.out.println(parseRequest);
 
             String sentence = parseRequest.text;
+            String[] posTags = parseRequest.posTags;
             ParseResult parseResult = parseText(sentence);
             parseResult.strategy = "PCFG";
             ParseResult lowerResult = parseText(sentence.toLowerCase());
             parseResult.strategy = "PCFG.lowercase";
-            ParseResult[] alternates = parseTextAlternates(sentence);
 
             ParseResponse parseResponse = new ParseResponse();
             parseResponse.tree = parseResult.tree;
             parseResponse.dependencies = parseResult.dependencies;
 
             ParseResult[] simpleAlternates = new ParseResult[] { parseResult, lowerResult };
-            ParseResult[] otherAlternates = parseTextAlternates(sentence);
+            ParseResult[] otherAlternates = parseTextAlternates(sentence, posTags);
             parseResponse.alternates = Stream.concat(
                     Arrays.stream(simpleAlternates),
                     Arrays.stream(otherAlternates)).toArray(ParseResult[]::new);
@@ -92,8 +93,10 @@ public class Stanford {
         return parseResult;
     }
 
-    public static ParseResult[] parseTextAlternates(String text) {
-        ParseResult parseResult = new ParseResult();
+    public static ParseResult[] parseTextAlternates(String text, String[] posTags) {
+        ArrayList<ParseResult> parseResults = new ArrayList<ParseResult>();
+        ParseResult parseResult;
+
         DocumentPreprocessor tokenizer = new DocumentPreprocessor(new StringReader(text));
         //TODO: handle multiple sentences via this loop
         for (List<HasWord> tokenized: tokenizer) {
@@ -108,18 +111,56 @@ public class Stanford {
 
             List<TaggedWord> tagged = tagger.tagSentence(tokenized);
             System.out.println("tagged words " + tagged);
-            parserQuery.parse(tagged);
-            System.out.println("tagged parse " + parserQuery.getBestParse());
-            parseResult.tree = parserQuery.getBestParse().toString();
-            parseResult.strategy = "PCFG.maxent";
+            parseResult = parseTagged(tagged);
+            parseResults.add(parseResult);
+            
+            parseResult = parseTaggedWithTags(tagged, posTags);
+            if (null != parseResult) {
+                parseResults.add(parseResult);
+            }
         }
 
-        return new ParseResult[] { parseResult };
+        return parseResults.toArray(new ParseResult[parseResults.size()]);
+    }
+
+    private static ParseResult parseTagged(List<TaggedWord> tagged) {
+        ParserQuery parserQuery = parser.parserQuery();
+        parserQuery.parse(tagged);
+        ParseResult parseResult = new ParseResult();
+        parseResult.tree = parserQuery.getBestParse().toString();
+        parseResult.strategy = "PCFG.maxent";
+        System.out.println("tagged parse " + parseResult.tree);
+        return parseResult;
+    }
+
+    private static ParseResult parseTaggedWithTags(List<TaggedWord> tagged, String[] posTags) {
+        ParserQuery parserQuery = parser.parserQuery();
+        //Overlay pre-processed part of speech tags
+        boolean appliedTag = false;
+        for (int i = 0; i < posTags.length; i++) {
+            String posTag = posTags[i];
+            if (!"".equals(posTag)) {
+                appliedTag = true;
+                TaggedWord taggedWord = tagged.get(i);
+                TaggedWord newTagged = new TaggedWord(taggedWord.value(), posTag);
+                tagged.set(i, newTagged);
+            }
+        }
+        if (!appliedTag) {
+            return null;
+        }
+        parserQuery.parse(tagged);
+        ParseResult parseResult = new ParseResult();
+        parseResult.tree = parserQuery.getBestParse().toString();
+        parseResult.strategy = "PCFG.maxent.posTags";
+        System.out.println("pre-tagged parse " + Arrays.toString(posTags) + " " + parseResult.tree);
+        return parseResult;
     }
 }
 
 class ParseRequest {
     String text = "";
+    String[] posTags = {};
 
     ParseRequest() { }
 }
