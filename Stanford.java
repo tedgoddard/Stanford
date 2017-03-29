@@ -82,7 +82,7 @@ public class Stanford {
 
     }
 
-    public static ParseResult parseText(String text) {
+    public synchronized static ParseResult parseText(String text) {
         ParseResult parseResult = new ParseResult();
         System.out.println("parseText will parse: " + text);
 
@@ -99,7 +99,7 @@ public class Stanford {
         return parseResult;
     }
 
-    public static ParseResult[] parseTextAlternates(String text, String[] posTags) {
+    public synchronized static ParseResult[] parseTextAlternates(String text, String[] posTags) {
         ArrayList<ParseResult> parseResults = new ArrayList<ParseResult>();
         ParseResult parseResult;
 
