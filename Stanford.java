@@ -22,6 +22,7 @@ import edu.stanford.nlp.ling.HasWord;
 import edu.stanford.nlp.ling.TaggedWord;
 import edu.stanford.nlp.process.DocumentPreprocessor;
 import edu.stanford.nlp.tagger.maxent.MaxentTagger;
+import edu.stanford.nlp.parser.nndep.DependencyParser;
 
 public class Stanford {
 
@@ -29,6 +30,7 @@ public class Stanford {
     static LexicalizedParser parser = LexicalizedParser.loadModel(parserModel);
     static String taggerPath = "edu/stanford/nlp/models/pos-tagger/english-left3words/english-left3words-distsim.tagger";
     static MaxentTagger tagger = new MaxentTagger(taggerPath);
+    static DependencyParser dependencyParser = DependencyParser.loadFromModelFile(DependencyParser.DEFAULT_MODEL);
 
     public static void main(String[] args) {
 
@@ -65,6 +67,10 @@ public class Stanford {
 
             ParseResult[] simpleAlternates = new ParseResult[] { parseResult, lowerResult };
             ParseResult[] otherAlternates = parseTextAlternates(sentence, posTags);
+            if (otherAlternates.length > 0) {
+                //This is without the custom overlay tags, this may not be desired
+                parseResponse.tags = otherAlternates[0].tags;
+            }
             parseResponse.alternates = Stream.concat(
                     Arrays.stream(simpleAlternates),
                     Arrays.stream(otherAlternates)).toArray(ParseResult[]::new);
@@ -112,15 +118,39 @@ public class Stanford {
             List<TaggedWord> tagged = tagger.tagSentence(tokenized);
             System.out.println("tagged words " + tagged);
             parseResult = parseTagged(tagged);
+            parseResult.tags = getTagStrings(tagged);
+
             parseResults.add(parseResult);
-            
-            parseResult = parseTaggedWithTags(tagged, posTags);
-            if (null != parseResult) {
+
+            parseResult = parseTaggedWithDependencyParser(tagged);
+            parseResults.add(parseResult);
+
+            System.out.println("overlayed tags " + Arrays.toString(posTags));
+            List<TaggedWord> customTagged = overlayTags(tagged, posTags);
+            if (null != customTagged) {
+                String[] customTagStrings = getTagStrings(customTagged);
+
+                parseResult = parseTagged(customTagged);
+                parseResult.tags = customTagStrings;
+                parseResult.strategy += ".posTags";
+                parseResults.add(parseResult);
+
+                parseResult = parseTaggedWithDependencyParser(customTagged);
+                parseResult.tags = customTagStrings;
+                parseResult.strategy += ".posTags";
                 parseResults.add(parseResult);
             }
         }
 
         return parseResults.toArray(new ParseResult[parseResults.size()]);
+    }
+
+    private static String[] getTagStrings(List<TaggedWord> tagged) {
+        ArrayList<String> result = new ArrayList<String>();
+        for (TaggedWord taggedWord: tagged) {
+            result.add(taggedWord.toString());
+        }
+        return result.toArray(new String[result.size()]);
     }
 
     private static ParseResult parseTagged(List<TaggedWord> tagged) {
@@ -133,8 +163,7 @@ public class Stanford {
         return parseResult;
     }
 
-    private static ParseResult parseTaggedWithTags(List<TaggedWord> tagged, String[] posTags) {
-        ParserQuery parserQuery = parser.parserQuery();
+    private static List<TaggedWord> overlayTags(List<TaggedWord> tagged, String[] posTags) {
         //Overlay pre-processed part of speech tags
         boolean appliedTag = false;
         for (int i = 0; i < posTags.length; i++) {
@@ -149,13 +178,21 @@ public class Stanford {
         if (!appliedTag) {
             return null;
         }
-        parserQuery.parse(tagged);
+        return tagged;
+    }
+
+    private static ParseResult parseTaggedWithDependencyParser(List<TaggedWord> tagged) {
         ParseResult parseResult = new ParseResult();
-        parseResult.tree = parserQuery.getBestParse().toString();
-        parseResult.strategy = "PCFG.maxent.posTags";
-        System.out.println("pre-tagged parse " + Arrays.toString(posTags) + " " + parseResult.tree);
+        GrammaticalStructure grammaticalStructure = dependencyParser.predict(tagged);
+        List<TypedDependency> typedDependencies = grammaticalStructure.typedDependenciesCCprocessed();
+        String dependenciesString = typedDependencies.toString();
+        parseResult.tree = null;
+        parseResult.dependencies = dependenciesString;
+        parseResult.strategy = "NNDEP";
+        System.out.println("dependency parse " + parseResult.dependencies);
         return parseResult;
     }
+
 }
 
 class ParseRequest {
@@ -168,6 +205,7 @@ class ParseRequest {
 class ParseResult {
     String tree = "";
     String dependencies = "";
+    String[] tags = {};
     String strategy = "";
 
     ParseResult() { }
@@ -176,6 +214,7 @@ class ParseResult {
 class ParseResponse {
     String tree = "";
     String dependencies = "";
+    String[] tags = {};
     ParseResult[] alternates = {};
 
     ParseResponse() { }
