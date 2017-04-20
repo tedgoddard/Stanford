@@ -26,13 +26,33 @@ import edu.stanford.nlp.parser.nndep.DependencyParser;
 
 public class Stanford {
 
+    static int maxRetries = 10;
     static String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
     static LexicalizedParser parser = LexicalizedParser.loadModel(parserModel);
     static String taggerPath = "edu/stanford/nlp/models/pos-tagger/english-left3words/english-left3words-distsim.tagger";
     static MaxentTagger tagger = new MaxentTagger(taggerPath);
-    static DependencyParser dependencyParser = DependencyParser.loadFromModelFile(DependencyParser.DEFAULT_MODEL);
+    static DependencyParser dependencyParser = null;
 
     public static void main(String[] args) {
+
+        new Thread("ParserLoader") {
+            public void run() {
+                for (int i = 0; i < maxRetries; i++) {
+                    try {
+                        try {
+                            Stanford.dependencyParser = DependencyParser.loadFromModelFile(DependencyParser.DEFAULT_MODEL);
+                            System.out.println("DependencyParser ready.");
+                            break;
+                        } catch (Throwable t) {
+                            t.printStackTrace();
+                        }
+                        Thread.sleep(10000);
+                    } catch (Throwable t) {
+                        t.printStackTrace();
+                    }
+                }
+            }
+        }.start();
 
         Spark.port(Integer.valueOf(System.getenv("STANFORD_PORT")));
         Spark.staticFileLocation("/public");
@@ -123,7 +143,9 @@ public class Stanford {
             parseResults.add(parseResult);
 
             parseResult = parseTaggedWithDependencyParser(tagged);
-            parseResults.add(parseResult);
+            if (null != parseResult) {
+                parseResults.add(parseResult);
+            }
 
             System.out.println("overlayed tags " + Arrays.toString(posTags));
             List<TaggedWord> customTagged = overlayTags(tagged, posTags);
@@ -136,9 +158,11 @@ public class Stanford {
                 parseResults.add(parseResult);
 
                 parseResult = parseTaggedWithDependencyParser(customTagged);
-                parseResult.tags = customTagStrings;
-                parseResult.strategy += ".posTags";
-                parseResults.add(parseResult);
+                if (null != parseResult) {
+                    parseResult.tags = customTagStrings;
+                    parseResult.strategy += ".posTags";
+                    parseResults.add(parseResult);
+                }
             }
         }
 
@@ -182,6 +206,9 @@ public class Stanford {
     }
 
     private static ParseResult parseTaggedWithDependencyParser(List<TaggedWord> tagged) {
+        if (null == dependencyParser) {
+            return null;
+        }
         ParseResult parseResult = new ParseResult();
         GrammaticalStructure grammaticalStructure = dependencyParser.predict(tagged);
         List<TypedDependency> typedDependencies = grammaticalStructure.typedDependenciesCCprocessed();
