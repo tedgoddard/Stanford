@@ -25,39 +25,35 @@ import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 import edu.stanford.nlp.parser.nndep.DependencyParser;
 
 public class Stanford {
-
-    static int maxRetries = 10;
+    static String BEST_STRATEGY = "PCFG.maxent.posTags";
+    static String BEST_DEPENDENCY = "NNDEP.posTags";
     static String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
-    static LexicalizedParser parser = LexicalizedParser.loadModel(parserModel);
     static String taggerPath = "edu/stanford/nlp/models/pos-tagger/english-left3words/english-left3words-distsim.tagger";
-    static MaxentTagger tagger = new MaxentTagger(taggerPath);
+    static LexicalizedParser parser = null;
+    static MaxentTagger tagger = null;
     static DependencyParser dependencyParser = null;
 
+    private static synchronized void initializeParsers() {
+        if (null == parser) {
+            parser = LexicalizedParser.loadModel(parserModel);
+            System.out.println("LexicalizedParser ready.");
+        }
+        if (null == tagger) {
+            tagger = new MaxentTagger(taggerPath);
+            System.out.println("MaxentTagger ready.");
+       }
+        if (null == dependencyParser) {
+            dependencyParser = DependencyParser.loadFromModelFile(DependencyParser.DEFAULT_MODEL);
+            System.out.println("DependencyParser ready.");
+        }
+    }
+
     public static void main(String[] args) {
-
-        new Thread("ParserLoader") {
-            public void run() {
-                for (int i = 0; i < maxRetries; i++) {
-                    try {
-                        try {
-                            Stanford.dependencyParser = DependencyParser.loadFromModelFile(DependencyParser.DEFAULT_MODEL);
-                            System.out.println("DependencyParser ready.");
-                            break;
-                        } catch (Throwable t) {
-                            t.printStackTrace();
-                        }
-                        Thread.sleep(10000);
-                    } catch (Throwable t) {
-                        t.printStackTrace();
-                    }
-                }
-            }
-        }.start();
-
         Spark.port(Integer.valueOf(System.getenv("STANFORD_PORT")));
         Spark.staticFileLocation("/public");
 
         Spark.get("/tree/:text", (request, response) -> {
+            initializeParsers();
             Gson gson = new Gson();
             String sentence = request.params(":text");
             ParseResult parseResult = parseText(sentence);
@@ -69,6 +65,7 @@ public class Stanford {
         });
 
         Spark.post("/tree/", (request, response) -> {
+            initializeParsers();
             Gson gson = new Gson();
             String body = request.body();
             ParseRequest parseRequest = gson.fromJson(body, ParseRequest.class);
@@ -84,12 +81,22 @@ public class Stanford {
             ParseResponse parseResponse = new ParseResponse();
             parseResponse.tree = parseResult.tree;
             parseResponse.dependencies = parseResult.dependencies;
+            parseResponse.strategy = parseResult.strategy;
 
             ParseResult[] simpleAlternates = new ParseResult[] { parseResult, lowerResult };
             ParseResult[] otherAlternates = parseTextAlternates(sentence, posTags);
             if (otherAlternates.length > 0) {
                 //This is without the custom overlay tags, this may not be desired
                 parseResponse.tags = otherAlternates[0].tags;
+                for (ParseResult otherResult: otherAlternates) {
+                    if (otherResult.strategy.equals(BEST_STRATEGY)) {
+                        parseResponse.tree = otherResult.tree;
+                        parseResponse.strategy = otherResult.strategy;
+                    }
+                    if (otherResult.strategy.equals(BEST_DEPENDENCY)) {
+                        parseResponse.dependencies = otherResult.dependencies;
+                    }
+                }
             }
             parseResponse.alternates = Stream.concat(
                     Arrays.stream(simpleAlternates),
@@ -220,6 +227,7 @@ public class Stanford {
         return parseResult;
     }
 
+
 }
 
 class ParseRequest {
@@ -241,6 +249,7 @@ class ParseResult {
 class ParseResponse {
     String tree = "";
     String dependencies = "";
+    String strategy = "";
     String[] tags = {};
     ParseResult[] alternates = {};
 
