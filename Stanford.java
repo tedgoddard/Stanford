@@ -43,7 +43,7 @@ public class Stanford {
             System.out.println("MaxentTagger ready.");
        }
         if (null == dependencyParser) {
-            if (!System.getenv("STANFORD_DEPENDENCY_PARSER").equals("0")) {
+            if (!"0".equals(System.getenv("STANFORD_DEPENDENCY_PARSER"))) {
                 dependencyParser = DependencyParser.loadFromModelFile(DependencyParser.DEFAULT_MODEL);
                 System.out.println("DependencyParser ready.");
             } else {
